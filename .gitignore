@@ -150,5 +150,8 @@ static/
 posts/static/
 media/
 
+# папка с тестами
+tests/
+
 
 
