@@ -186,6 +186,39 @@ def parse_status(homework):
     )
 
 
+def get_and_check_response(timestamp):
+    """Получает и проверяет ответ от API."""
+    response = get_api_answer(timestamp)
+    check_response(response)
+    return response
+
+
+def handle_homework(
+    bot,
+    homework,
+    last_status,
+    exit_on_send_message_error
+):
+    """Обрабатывает домашнюю работу и отправляет статус, если он изменился."""
+    try:
+        status = parse_status(homework)
+        if status != last_status:
+            send_message(bot, status)
+            last_status = status
+        else:
+            logger.debug('Статус не изменился.')
+    except MessageSendError as e:
+        logger.error(
+            f'Ошибка при отправке сообщения: {e}'
+        )
+        if exit_on_send_message_error:
+            sys.exit(1)
+    except Exception as e:
+        logger.error(
+            f'Ошибка при обработке статуса: {e}'
+        )
+
+
 def main():
     """Основная логика работы бота."""
     setup_logger()
@@ -209,29 +242,16 @@ def main():
 
     while True:
         try:
-            response = get_api_answer(timestamp)
-            check_response(response)
-
+            response = get_and_check_response(timestamp)
             homeworks = response.get('homeworks', [])
+
             if homeworks:
-                homework = homeworks[0]
-                try:
-                    status = parse_status(homework)
-                    if status != last_status:
-                        send_message(bot, status)
-                        last_status = status
-                    else:
-                        logger.debug('Статус не изменился.')
-                except MessageSendError as e:
-                    logger.error(
-                        f'Ошибка при отправке сообщения: {e}'
-                    )
-                    if exit_on_send_message_error:
-                        sys.exit(1)
-                except Exception as e:
-                    logger.error(
-                        f'Ошибка при обработке статуса: {e}'
-                    )
+                handle_homework(
+                    bot,
+                    homeworks[0],
+                    last_status,
+                    exit_on_send_message_error
+                )
             else:
                 logger.debug('Нет новых статусов.')
 
@@ -247,3 +267,7 @@ def main():
             )
         finally:
             time.sleep(RETRY_PERIOD)
+
+
+if __name__ == '__main__':
+    main()
