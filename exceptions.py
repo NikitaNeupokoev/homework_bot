@@ -1,5 +1,17 @@
+class APIConnectionError(Exception):
+    """Ошибка соединения с API."""
+
+
 class APIResponseError(Exception):
-    """Исключение, выбрасываемое при ошибке в ответе API."""
+    """Ошибка ответа API."""
+
+
+class HomeworksNotListError(TypeError):
+    """Исключение, выбрасываемое, когда 'homeworks' не список."""
+
+
+class JSONDecodeError(Exception):
+    """Ошибка декодирования JSON."""
 
 
 class MessageSendError(Exception):
@@ -8,10 +20,6 @@ class MessageSendError(Exception):
 
 class MissingHomeworkKeyError(KeyError):
     """Исключение, выбрасываемое при отсутствии ключа 'homeworks'."""
-
-
-class HomeworksNotListError(TypeError):
-    """Исключение, выбрасываемое, когда 'homeworks' не список."""
 
 
 class UnknownHomeworkStatusError(ValueError):
