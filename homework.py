@@ -3,7 +3,6 @@ import logging
 import os
 import sys
 import time
-from enum import Enum
 
 import requests
 from dotenv import load_dotenv
@@ -39,14 +38,6 @@ HOMEWORK_VERDICTS = {
 logger = logging.getLogger(__name__)
 
 
-class Token(Enum):
-    """Enum для хранения токенов и идентификаторов приложения."""
-
-    PRACTICUM_TOKEN = 'PRACTICUM_TOKEN'
-    TELEGRAM_TOKEN = 'TELEGRAM_TOKEN'
-    TELEGRAM_CHAT_ID = 'TELEGRAM_CHAT_ID'
-
-
 def setup_logger():
     """Настраивает логирование."""
     logging.basicConfig(
@@ -61,12 +52,14 @@ def setup_logger():
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    required_tokens = (
-        {token: globals()[token.value] for token in Token}
-    )
+    required_tokens = {
+        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
+        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
+        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID,
+    }
 
     missing_tokens = [
-        token.name for token,
+        token_name for token_name,
         token_value in required_tokens.items() if not token_value
     ]
 
@@ -117,14 +110,14 @@ def get_api_answer(timestamp):
             f'Ошибка соединения с API: {e}. '
             f'Параметры запроса: {request_kwargs}'
         )
-        logger.error(log_message)
+        logger.debug(log_message)
         raise APIConnectionError(log_message) from e
     except requests.RequestException as e:
         log_message = (
             f'Ошибка при запросе к API: {e}. '
             f'Параметры запроса: {request_kwargs}'
         )
-        logger.error(log_message)
+        logger.debug(log_message)
         raise APIResponseError(log_message) from e
 
     if response.status_code != http.HTTPStatus.OK:
@@ -132,7 +125,7 @@ def get_api_answer(timestamp):
             f'API вернул код ответа {response.status_code}. '
             f'Параметры запроса: {request_kwargs}'
         )
-        logger.error(log_message)
+        logger.debug(log_message)
         raise APIResponseError(log_message)
 
     try:
@@ -142,7 +135,7 @@ def get_api_answer(timestamp):
             f'Ошибка при декодировании JSON: {e}. '
             f'Параметры запроса: {request_kwargs}'
         )
-        logger.error(log_message)
+        logger.debug(log_message)
         raise JSONDecodeError(log_message) from e
 
 
@@ -168,7 +161,7 @@ def check_response(response):
 def parse_status(homework):
     """Извлекает статус работы и возвращает подготовленную строку."""
     if 'homework_name' not in homework:
-        logger.error(
+        logger.debug(
             'Отсутствует ключ "homework_name" в homework.'
         )
         raise MissingHomeworkKeyError(
@@ -176,7 +169,7 @@ def parse_status(homework):
         )
 
     if 'status' not in homework:
-        logger.error(
+        logger.debug(
             'Отсутствует ключ "status" в homework.'
         )
         raise MissingHomeworkKeyError(
@@ -187,7 +180,7 @@ def parse_status(homework):
     status = homework['status']
 
     if status not in HOMEWORK_VERDICTS:
-        logger.error(
+        logger.debug(
             f'Неизвестный статус работы: {status}'
         )
         raise UnknownHomeworkStatusError(
@@ -216,15 +209,10 @@ def handle_homework(bot, homework, last_status):
     if status != last_status:
         send_message(bot, status)
         return status
-    else:
-        logger.debug('Статус не изменился.')
-        return last_status
 
 
 def main():
     """Основная логика работы бота."""
-    setup_logger()
-
     if not check_tokens():
         logger.critical(
             'Необходимые токены отсутствуют. Завершение работы.'
@@ -233,9 +221,7 @@ def main():
 
     bot = TeleBot(TELEGRAM_TOKEN)
     timestamp = int(time.time())
-    last_status = None
-
-    error_sent = False
+    last_message = None
 
     while True:
         try:
@@ -243,38 +229,31 @@ def main():
             homeworks = response.get('homeworks', [])
 
             if homeworks:
-                last_status = handle_homework(
+                last_message = handle_homework(
                     bot,
                     homeworks[0],
-                    last_status
+                    last_message
                 )
             else:
                 logger.debug('Нет новых статусов.')
 
             timestamp = response.get('current_date', timestamp)
 
-        except APIResponseError as e:
-            logger.error(
-                f'Ошибка при получении ответа от API: {e}'
-            )
-            if not error_sent:
-                send_message(
-                    bot,
-                    f'Ошибка при получении ответа от API: {e}'
-                )
-                error_sent = True
         except Exception as e:
             logger.exception(
                 f'Сбой в работе: {e}'
             )
-            if not error_sent:
+            try:
                 send_message(
                     bot,
                     f'Сбой в работе: {e}'
                 )
-                error_sent = True
-        else:
-            error_sent = False
+            except Exception as telegram_error:
+                logger.error(
+                    f'Не удалось отправить сообщение об ошибке в Telegram:'
+                    f'{telegram_error}'
+                )
+            last_message = str(e)
 
         finally:
             time.sleep(RETRY_PERIOD)
@@ -282,10 +261,4 @@ def main():
 
 if __name__ == '__main__':
     setup_logger()
-    exit_on_send_message_error = (
-        os.getenv(
-            'EXIT_ON_SEND_MESSAGE_ERROR',
-            'True'
-        ).lower() == 'true'
-    )
     main()
