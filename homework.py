@@ -105,38 +105,31 @@ def get_api_answer(timestamp):
 
     try:
         response = requests.get(**request_kwargs)
+        response.raise_for_status()
     except requests.ConnectionError as e:
-        log_message = (
-            f'Ошибка соединения с API: {e}. '
+        raise APIConnectionError(
+            f'Ошибка соединения с API: {e}'
             f'Параметры запроса: {request_kwargs}'
-        )
-        logger.debug(log_message)
-        raise APIConnectionError(log_message) from e
+        ) from e
     except requests.RequestException as e:
-        log_message = (
-            f'Ошибка при запросе к API: {e}. '
+        raise APIResponseError(
+            f'Ошибка при запросе к API: {e}'
             f'Параметры запроса: {request_kwargs}'
-        )
-        logger.debug(log_message)
-        raise APIResponseError(log_message) from e
+        ) from e
 
     if response.status_code != http.HTTPStatus.OK:
-        log_message = (
-            f'API вернул код ответа {response.status_code}. '
+        raise APIResponseError(
+            f'API вернул код ответа {response.status_code}.'
             f'Параметры запроса: {request_kwargs}'
         )
-        logger.debug(log_message)
-        raise APIResponseError(log_message)
 
     try:
         return response.json()
     except ValueError as e:
-        log_message = (
-            f'Ошибка при декодировании JSON: {e}. '
+        raise JSONDecodeError(
+            f'Ошибка при декодировании JSON: {e}'
             f'Параметры запроса: {request_kwargs}'
-        )
-        logger.debug(log_message)
-        raise JSONDecodeError(log_message) from e
+        ) from e
 
 
 def check_response(response):
@@ -159,19 +152,16 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Извлекает статус работы и возвращает подготовленную строку."""
+    """
+    Извлекает статус работы.
+    и возвращает подготовленную строку.
+    """
     if 'homework_name' not in homework:
-        logger.debug(
-            'Отсутствует ключ "homework_name" в homework.'
-        )
         raise MissingHomeworkKeyError(
             'Отсутствует ключ "homework_name" в homework.'
         )
 
     if 'status' not in homework:
-        logger.debug(
-            'Отсутствует ключ "status" в homework.'
-        )
         raise MissingHomeworkKeyError(
             'Отсутствует ключ "status" в homework.'
         )
@@ -180,9 +170,6 @@ def parse_status(homework):
     status = homework['status']
 
     if status not in HOMEWORK_VERDICTS:
-        logger.debug(
-            f'Неизвестный статус работы: {status}'
-        )
         raise UnknownHomeworkStatusError(
             f'Неизвестный статус работы: {status}'
         )
@@ -196,26 +183,35 @@ def parse_status(homework):
 
 
 def handle_api_request(timestamp):
-    """Обрабатывает запрос к API, получает и проверяет ответ."""
+    """
+    Обрабатывает запрос к API.
+    получает и проверяет ответ.
+    """
     check_response(get_api_answer(timestamp))
     return get_api_answer(timestamp)
 
 
 def handle_homework(bot, homework, last_status):
-    """Обрабатывает домашнюю работу и возвращает новый статус.
-    если он изменился.
+    """
+    Обрабатывает домашнюю работу и.
+    возвращает новый статус, если он изменился.
     """
     status = parse_status(homework)
+
     if status != last_status:
         send_message(bot, status)
         return status
+
+    logger.debug('Статус не изменился.')
+    return last_status
 
 
 def main():
     """Основная логика работы бота."""
     if not check_tokens():
         logger.critical(
-            'Необходимые токены отсутствуют. Завершение работы.'
+            'Необходимые токены отсутствуют.'
+            'Завершение работы.'
         )
         sys.exit(1)
 
@@ -239,21 +235,14 @@ def main():
 
             timestamp = response.get('current_date', timestamp)
 
-        except Exception as e:
-            logger.exception(
-                f'Сбой в работе: {e}'
+        except MessageSendError as send_error:
+            logger.error(
+                'Не удалось отправить сообщение об ошибке в Telegram:'
+                f'{send_error}'
             )
-            try:
-                send_message(
-                    bot,
-                    f'Сбой в работе: {e}'
-                )
-            except Exception as telegram_error:
-                logger.error(
-                    f'Не удалось отправить сообщение об ошибке в Telegram:'
-                    f'{telegram_error}'
-                )
-            last_message = str(e)
+
+        except Exception as e:
+            logger.exception(f'Сбой в работе: {e}')
 
         finally:
             time.sleep(RETRY_PERIOD)
