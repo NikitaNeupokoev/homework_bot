@@ -184,7 +184,7 @@ def parse_status(homework):
 
 def handle_api_request(timestamp):
     """
-    Обрабатывает запрос к API.
+    Обрабатывает запрос к API
     получает и проверяет ответ.
     """
     check_response(get_api_answer(timestamp))
@@ -193,7 +193,7 @@ def handle_api_request(timestamp):
 
 def handle_homework(bot, homework, last_status):
     """
-    Обрабатывает домашнюю работу и.
+    Обрабатывает домашнюю работу и
     возвращает новый статус, если он изменился.
     """
     status = parse_status(homework)
